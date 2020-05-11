@@ -22,40 +22,24 @@ struct Config {
 
 
   const char* output_message[label_num] = {
+         "COOL:\n\r"
 
-        "RING:\n\r"
+        "               \n\r"
 
-        "          *       \n\r"
+        "               \n\r"
 
-        "       *     *    \n\r"
+        "               \n\r"
 
-        "     *         *  \n\r"
+        "                \n\r"
 
-        "    *           * \n\r"
+        "                \n\r"
 
-        "     *         *  \n\r"
+        "                \n\r"
 
-        "       *     *    \n\r"
+        "                \n\r"
 
-        "          *       \n\r",
-
-        "SLOPE:\n\r"
-
-        "        *        \n\r"
-
-        "       *         \n\r"
-
-        "      *          \n\r"
-
-        "     *           \n\r"
-
-        "    *            \n\r"
-
-        "   *             \n\r"
-
-        "  *              \n\r"
-
-        " * * * * * * * * \n\r"};
+        " * * * * * * * * \n\r"
+        };
 
 };
 
