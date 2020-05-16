@@ -30,7 +30,7 @@ Thread t1;
 Thread t2;
 int idC = 0;
 int state = 0;
-int flag = 0;
+int stop = 0;
 int song[42] = {
   261, 261, 392, 392, 440, 440, 392,
   349, 349, 330, 330, 294, 294, 261,
@@ -141,6 +141,9 @@ void play(){
       }
       if(length < 1) wait(1.0);
     }
+    if(stop == 1){
+      break;
+    }
   }  
 }
 void forward(void){
@@ -185,7 +188,7 @@ void modeSelect(){
 void loadSignal(void)
 {
   green_led = 0;
-  int i = 0, flag = 0;
+  int i = 0;
   serialCount = 0;
   audio.spk.pause();
   while(i < 42)
@@ -209,7 +212,8 @@ void loadSignal(void)
   }
   green_led = 1;
 }
-void confirm(void){
+void confirm(void){ 
+  stop = 0;                             
   switch(state){
       case 0:
         uLCD.cls();
@@ -219,10 +223,8 @@ void confirm(void){
         uLCD.printf("\nLoad song%d...\n", songnum);
         loadSignal();
         uLCD.printf("\nplay song%d\n", songnum);
-        play();
-        uLCD.cls();
-        uLCD.printf("\nTake a rest...\n");
         state = 3;
+        play();
         break;
       case 1:
         uLCD.cls();
@@ -232,14 +234,11 @@ void confirm(void){
         uLCD.printf("\nLoad song%d...\n", songnum);
         loadSignal();
         uLCD.printf("\nplay song%d\n", songnum);
-        play();
-        uLCD.cls();
-        uLCD.printf("\nTake a rest...\n");
         state = 3;
-        break;
+        play();
         break;
       case 2:
-        audio.spk.pause();
+        //audio.spk.pause();
         uLCD.cls();
         uLCD.printf("\nselect your song\n");
         while (true) {
@@ -282,20 +281,20 @@ void confirm(void){
         pc.printf("%d", songnum);
         loadSignal();
         uLCD.printf("\nplay song%d\n", songnum);
-        play();
-        uLCD.cls();
-        uLCD.printf("\nTake a rest...\n");
         state = 3;
+        play();
         break;
       default:
         break;
-      } 
+  }
 } 
+ 
 void DNN(){
   audio.spk.pause();
   uLCD.cls();
   uLCD.printf("\nmode\n");
   int selectsong = 0;
+  stop = 1;
   button2.rise(queue2.event(confirm));
   while (true) {
     // Attempt to read new data from the accelerometer
@@ -421,6 +420,7 @@ int main(int argc, char* argv[]) {
     }
     wait(1.0);
   }*/
+  green_led = 1;
   uLCD.printf("\nPlay Song\n");
   t1.start(callback(&queue1, &EventQueue::dispatch_forever));
   button1.rise(queue1.event(DNN));
