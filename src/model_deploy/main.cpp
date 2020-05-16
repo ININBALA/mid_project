@@ -181,11 +181,122 @@ void modeSelect(){
     }
   }
 }
+
+void loadSignal(void)
+{
+  green_led = 0;
+  int i = 0, flag = 0;
+  serialCount = 0;
+  audio.spk.pause();
+  while(i < 42)
+  {
+    if(pc.readable())
+    {
+      serialInBuffer[serialCount] = pc.getc();
+      serialCount++;
+      if(serialCount == 3)
+      {//pc.printf("%f\n",signal[0]);
+        serialInBuffer[serialCount] = '\0';
+        song[i] = (int) atof(serialInBuffer);
+        uLCD.printf("\n%d\n", song[i]);
+        //flag = (int) atof(serialInBuffer);
+        //pc.printf("%d\n\r",signal[i]);
+        //pc.printf("%d\n",flag);
+        serialCount = 0;
+        i++;
+      }
+    }
+  }
+  green_led = 1;
+}
+void confirm(void){
+  switch(state){
+      case 0:
+        uLCD.cls();
+        if(songnum < 2)
+          songnum++;
+        pc.printf("%d", songnum);
+        uLCD.printf("\nLoad song%d...\n", songnum);
+        loadSignal();
+        uLCD.printf("\nplay song%d\n", songnum);
+        play();
+        uLCD.cls();
+        uLCD.printf("\nTake a rest...\n");
+        state = 3;
+        break;
+      case 1:
+        uLCD.cls();
+        if(songnum > 0)
+          songnum--;
+        pc.printf("%d", songnum);
+        uLCD.printf("\nLoad song%d...\n", songnum);
+        loadSignal();
+        uLCD.printf("\nplay song%d\n", songnum);
+        play();
+        uLCD.cls();
+        uLCD.printf("\nTake a rest...\n");
+        state = 3;
+        break;
+        break;
+      case 2:
+        audio.spk.pause();
+        uLCD.cls();
+        uLCD.printf("\nselect your song\n");
+        while (true) {
+          // Attempt to read new data from the accelerometer
+          got_data = ReadAccelerometer(error_reporter, model_input->data.f,
+                                      input_length, should_clear_buffer);
+          // If there was no new data,
+          // don't try to clear the buffer again and wait until next time
+          if (!got_data) {
+            should_clear_buffer = false;
+            continue;
+          }
+          // Run inference, and report any error
+          TfLiteStatus invoke_status = interpreter->Invoke();
+          if (invoke_status != kTfLiteOk) {
+            error_reporter->Report("Invoke failed on index: %d\n", begin_index);
+            continue;
+          }
+          // Analyze the results to obtain a prediction
+          gesture_index = PredictGesture(interpreter->output(0)->data.f);
+
+          // Clear the buffer next time we read data
+          should_clear_buffer = gesture_index < label_num;
+
+          // Produce an output
+          if (gesture_index < label_num) {
+            //error_reporter->Report(config.output_message[gesture_index]);
+            if(songnum < 2)
+              songnum++;
+            else
+              songnum = 0;
+            uLCD.cls();
+            uLCD.printf("\nselect your song\n");
+            uLCD.printf("\nsong%d\n", songnum);
+          }
+          if(button2 == 0)
+            break;
+        }
+        uLCD.printf("\nLoad song%d...\n", songnum);
+        pc.printf("%d", songnum);
+        loadSignal();
+        uLCD.printf("\nplay song%d\n", songnum);
+        play();
+        uLCD.cls();
+        uLCD.printf("\nTake a rest...\n");
+        state = 3;
+        break;
+      default:
+        break;
+      } 
+} 
 void DNN(){
   audio.spk.pause();
   uLCD.cls();
   uLCD.printf("\nmode\n");
   int selectsong = 0;
+  button2.rise(queue2.event(confirm));
   while (true) {
     // Attempt to read new data from the accelerometer
     got_data = ReadAccelerometer(error_reporter, model_input->data.f,
@@ -246,112 +357,6 @@ void DNN(){
     else if(button2 == 0 && selectsong == 1)
       break;*/
   }
-}
-void loadSignal(void)
-{
-  green_led = 0;
-  int i = 0, flag = 0;
-  serialCount = 0;
-  audio.spk.pause();
-  while(i < 42)
-  {
-    if(pc.readable())
-    {
-      serialInBuffer[serialCount] = pc.getc();
-      serialCount++;
-      if(serialCount == 3)
-      {//pc.printf("%f\n",signal[0]);
-        serialInBuffer[serialCount] = '\0';
-        song[i] = (int) atof(serialInBuffer);
-        uLCD.printf("\n%d\n", song[i]);
-        //flag = (int) atof(serialInBuffer);
-        //pc.printf("%d\n\r",signal[i]);
-        //pc.printf("%d\n",flag);
-        serialCount = 0;
-        i++;
-      }
-    }
-  }
-  green_led = 1;
-}
-void confirm(void){
-  switch(state){
-      case 0:
-        uLCD.cls();
-        if(songnum < 2)
-          songnum++;
-        pc.printf("%d", songnum);
-        uLCD.printf("\nLoad song...\n");
-        loadSignal();
-        uLCD.printf("\nplay song\n");
-        play();
-        uLCD.cls();
-        uLCD.printf("\nGo\n");
-        state = 3;
-        break;
-      case 1:
-        uLCD.cls();
-        if(songnum > 0)
-          songnum--;
-        pc.printf("%d", songnum);
-        uLCD.printf("\nLoad song%d...\n", songnum);
-        loadSignal();
-        uLCD.printf("\nplay song%d\n", songnum);
-        play();
-        uLCD.cls();
-        uLCD.printf("\nGo\n");
-        state = 3;
-        break;
-        break;
-      case 2:
-        //audio.spk.pause();
-        uLCD.cls();
-        uLCD.printf("\nselect\n");
-        while (true) {
-          // Attempt to read new data from the accelerometer
-          got_data = ReadAccelerometer(error_reporter, model_input->data.f,
-                                      input_length, should_clear_buffer);
-          // If there was no new data,
-          // don't try to clear the buffer again and wait until next time
-          if (!got_data) {
-            should_clear_buffer = false;
-            continue;
-          }
-          // Run inference, and report any error
-          TfLiteStatus invoke_status = interpreter->Invoke();
-          if (invoke_status != kTfLiteOk) {
-            error_reporter->Report("Invoke failed on index: %d\n", begin_index);
-            continue;
-          }
-          // Analyze the results to obtain a prediction
-          gesture_index = PredictGesture(interpreter->output(0)->data.f);
-
-          // Clear the buffer next time we read data
-          should_clear_buffer = gesture_index < label_num;
-
-          // Produce an output
-          if (gesture_index < label_num) {
-            //error_reporter->Report(config.output_message[gesture_index]);
-            if(songnum < 2)
-              songnum++;
-            else
-              songnum = 0;
-            uLCD.printf("\nsong%d\n", songnum);
-          }
-          if(button2 == 0)
-            break;
-        }
-        uLCD.printf("\nLoad song%d...\n", songnum);
-        loadSignal();
-        uLCD.printf("\nplay song%d\n", songnum);
-        play();
-        uLCD.cls();
-        uLCD.printf("\nGo\n");
-        state = 3;
-        break;
-      default:
-        break;
-      } 
 }
 int main(int argc, char* argv[]) {
   // Create an area of memory to use for input, output, and intermediate arrays.
@@ -420,5 +425,5 @@ int main(int argc, char* argv[]) {
   t1.start(callback(&queue1, &EventQueue::dispatch_forever));
   button1.rise(queue1.event(DNN));
   t2.start(callback(&queue2, &EventQueue::dispatch_forever));
-  button2.rise(queue2.event(confirm));
+  
 }
