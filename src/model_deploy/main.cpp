@@ -13,6 +13,9 @@
 #include "tensorflow/lite/schema/schema_generated.h"
 #include "tensorflow/lite/version.h"
 
+#define bufferLength (32)
+#define signalLength (1024)
+
 DA7212 audio;
 int16_t waveform[kAudioTxBufferSize];
 // Return the result of the last prediction
@@ -42,7 +45,7 @@ int noteLength[42] = {
   1, 1, 1, 1, 1, 1, 2,
   1, 1, 1, 1, 1, 1, 2,
   1, 1, 1, 1, 1, 1, 2};
-int16_t waveform[kAudioTxBufferSize];
+int songnum = 0;
 char serialInBuffer[bufferLength];
 DigitalOut green_led(LED2);
 int serialCount = 0;
@@ -206,7 +209,7 @@ void DNN(void){
 
     // Produce an output
     if (gesture_index < label_num) {
-      error_reporter->Report(config.output_message[gesture_index]);
+      //error_reporter->Report(config.output_message[gesture_index]);
       if(state < 2)
         state++;
       else
@@ -225,16 +228,17 @@ void DNN(void){
         break;
       } 
     }
-  }
+    if(button2 == 0)
+      break;
+  } 
 }
 void loadSignal(void)
 {
   green_led = 0;
   int i = 0, flag = 0;
-  note_num = 0;
   serialCount = 0;
   audio.spk.pause();
-  while(flag >= 0)
+  while(i < 42)
   {
     if(pc.readable())
     {
@@ -243,13 +247,13 @@ void loadSignal(void)
       if(serialCount == 3)
       {//pc.printf("%f\n",signal[0]);
         serialInBuffer[serialCount] = '\0';
-        signal[i] = (int) atof(serialInBuffer);
+        song[i] = (int) atof(serialInBuffer);
+        uLCD.printf("\n%d\n", song[i]);
         //flag = (int) atof(serialInBuffer);
-        pc.printf("%d\n\r",signal[i]);
+        //pc.printf("%d\n\r",signal[i]);
         //pc.printf("%d\n",flag);
         serialCount = 0;
         i++;
-        note_num++;
       }
     }
   }
@@ -258,11 +262,31 @@ void loadSignal(void)
 void confirm(void){
   switch(state){
       case 0:
-        pc.printf(0)
+        uLCD.cls();
+        if(songnum < 2)
+          songnum++;
+        pc.printf("%d", songnum);
+        uLCD.printf("\nLoad song...\n");
         loadSignal();
+        uLCD.printf("\nplay song\n");
+        play();
+        uLCD.cls();
+        uLCD.printf("\nGo\n");
+        state = 3;
         break;
       case 1:
-        backward();
+        uLCD.cls();
+        if(songnum > 0)
+          songnum--;
+        pc.printf("%d", songnum);
+        uLCD.printf("\nLoad song...\n");
+        loadSignal();
+        uLCD.printf("\nplay song\n");
+        play();
+        uLCD.cls();
+        uLCD.printf("\nGo\n");
+        state = 3;
+        break;
         break;
       case 2:
         select();
@@ -314,17 +338,17 @@ int main(int argc, char* argv[]) {
       (model_input->dims->data[1] != config.seq_length) ||
       (model_input->dims->data[2] != kChannelNumber) ||
       (model_input->type != kTfLiteFloat32)) {
-    error_reporter->Report("Bad input tensor pabutton1.rise(queue1.event(backward));rameters in model");
+   // error_reporter->Report("Bad input tensor pabutton1.rise(queue1.event(backward));rameters in model");
     return -1;
   }
 
 
   if (setup_status != kTfLiteOk) {
-    error_reporter->Report("Set up failed\n");
+   // error_reporter->Report("Set up failed\n");
     return -1;
   }
 
-  error_reporter->Report("Set up successful...\n");
+  //error_reporter->Report("Set up successful...\n");
   /*for(int i = 0; i < 42; i++)
   {
      // the loop below will play the note for the duration of 1s
@@ -338,5 +362,5 @@ int main(int argc, char* argv[]) {
   t1.start(callback(&queue1, &EventQueue::dispatch_forever));
   button1.rise(queue1.event(DNN));
   t2.start(callback(&queue2, &EventQueue::dispatch_forever));
-  button2.rise(queue2.event(play));
+  button2.rise(queue2.event(confirm));
 }
