@@ -12,7 +12,28 @@
 #include "tensorflow/lite/micro/micro_mutable_op_resolver.h"
 #include "tensorflow/lite/schema/schema_generated.h"
 #include "tensorflow/lite/version.h"
-
+#include "fsl_port.h"
+#include "fsl_gpio.h"
+#define UINT14_MAX        16383
+// FXOS8700CQ I2C address
+#define FXOS8700CQ_SLAVE_ADDR0 (0x1E<<1) // with pins SA0=0, SA1=0
+#define FXOS8700CQ_SLAVE_ADDR1 (0x1D<<1) // with pins SA0=1, SA1=0
+#define FXOS8700CQ_SLAVE_ADDR2 (0x1C<<1) // with pins SA0=0, SA1=1
+#define FXOS8700CQ_SLAVE_ADDR3 (0x1F<<1) // with pins SA0=1, SA1=1
+// FXOS8700CQ internal register addresses
+#define FXOS8700Q_STATUS 0x00
+#define FXOS8700Q_OUT_X_MSB 0x01
+#define FXOS8700Q_OUT_Y_MSB 0x03
+#define FXOS8700Q_OUT_Z_MSB 0x05
+#define FXOS8700Q_M_OUT_X_MSB 0x33
+#define FXOS8700Q_M_OUT_Y_MSB 0x35
+#define FXOS8700Q_M_OUT_Z_MSB 0x37
+#define FXOS8700Q_WHOAMI 0x0D
+#define FXOS8700Q_XYZ_DATA_CFG 0x0E
+#define FXOS8700Q_CTRL_REG1 0x2A
+#define FXOS8700Q_M_CTRL_REG1 0x5B
+#define FXOS8700Q_M_CTRL_REG2 0x5C
+#define FXOS8700Q_WHOAMI_VAL 0xC7
 #define bufferLength (32)
 #define signalLength (1024)
 
@@ -21,17 +42,30 @@ int16_t waveform[kAudioTxBufferSize];
 // Return the result of the last prediction
 uLCD_4DGL uLCD(D1, D0, D2);
 Serial pc(USBTX, USBRX);
-
+//I2C i2c( PTD9,PTD8);
+int m_addr = FXOS8700CQ_SLAVE_ADDR1;
 InterruptIn button1(SW2);
 InterruptIn button2(SW3);
 EventQueue queue1(32 * EVENTS_EVENT_SIZE);
 EventQueue queue2(32 * EVENTS_EVENT_SIZE);
+EventQueue queue3(32 * EVENTS_EVENT_SIZE);
 Thread t1;
 Thread t2;
-int idC = 0;
+Thread t3;
+int idC1 = 0;
+int idC2 = 0;
 int state = 0;
 int stop = 0;
+int heavy = 0;
+int light = 0;
 int song[42] = {
+  261, 261, 392, 392, 440, 440, 392,
+  349, 349, 330, 330, 294, 294, 261,
+  392, 392, 349, 349, 330, 330, 294,
+  392, 392, 349, 349, 330, 330, 294,
+  261, 261, 392, 392, 440, 440, 392,
+  349, 349, 330, 330, 294, 294, 261};
+int Taikosong[42] = {
   261, 261, 392, 392, 440, 440, 392,
   349, 349, 330, 330, 294, 294, 261,
   392, 392, 349, 349, 330, 330, 294,
@@ -47,6 +81,7 @@ int noteLength[42] = {
   1, 1, 1, 1, 1, 1, 2};
 int songnum = 0;
 char serialInBuffer[bufferLength];
+int score = 0;
 DigitalOut green_led(LED2);
 int serialCount = 0;
 constexpr int kTensorArenaSize = 60 * 1024;
@@ -73,7 +108,17 @@ TfLiteTensor* model_input = interpreter->input(0);
 
 int input_length = model_input->bytes / sizeof(float);
 TfLiteStatus setup_status = SetupAccelerometer(error_reporter);
+/*
+void FXOS8700CQ_readRegs(int addr, uint8_t * data, int len) {
+   char t = addr;
+   i2c.write(m_addr, &t, 1, true);
+   i2c.read(m_addr, (char *)data, len);
+}
 
+void FXOS8700CQ_writeRegs(uint8_t * data, int len) {
+   i2c.write(m_addr, (char *)data, len);
+}
+*/
 int PredictGesture(float* output) {
   // How many times the most recent gesture has been matched in a row
   static int continuous_count = 0;
@@ -127,8 +172,9 @@ void playNote(int freq)
 }
 
 void play(){
+  uLCD.cls();
+  uLCD.printf("\nplay song%d\n", songnum);
   audio.spk.play();
-  uLCD.printf("\nASS\n");
    for(int i = 0; i < 42; i++)
   {
     int length = noteLength[i];
@@ -191,6 +237,8 @@ void loadSignal(void)
   int i = 0;
   serialCount = 0;
   audio.spk.pause();
+  uLCD.cls();
+  uLCD.printf("\nLoad song%d...\n", songnum);
   while(i < 42)
   {
     if(pc.readable())
@@ -201,7 +249,10 @@ void loadSignal(void)
       {//pc.printf("%f\n",signal[0]);
         serialInBuffer[serialCount] = '\0';
         song[i] = (int) atof(serialInBuffer);
-        uLCD.printf("\n%d\n", song[i]);
+        if(i%2 == 0)
+          uLCD.circle(10,30,5,GREEN);
+        else
+          uLCD.circle(10,30,5,BLACK);
         //flag = (int) atof(serialInBuffer);
         //pc.printf("%d\n\r",signal[i]);
         //pc.printf("%d\n",flag);
@@ -212,6 +263,125 @@ void loadSignal(void)
   }
   green_led = 1;
 }
+void playTaiko(void){
+  audio.spk.play();
+  int k = 0;
+  for(int i = 3; i > 0; i--){
+    uLCD.cls();
+    uLCD.printf("wait %d sec... ", i);
+    wait(1.0);
+  }
+   for(int i = 0; i < 42; i++)
+  {
+    int length = noteLength[i];
+    while(length--)
+    {
+      // the loop below will play the note for the duration of 1s
+      for(int j = 0; j < kAudioSampleFrequency / kAudioTxBufferSize; ++j)
+      {
+        queue1.call(playNote, Taikosong[i]);
+      }
+      if(length < 1){
+
+        if(k%2 == 0){
+          uLCD.circle(40,40,10,BLUE);
+          if(heavy == 1)
+            uLCD.filled_circle(40, 40 , 5, BLUE);
+        }
+        else{
+          uLCD.circle(40,40,10,RED);
+          if(light == 1)
+            uLCD.filled_circle(40, 40 , 5, RED);
+        }
+        wait(0.5);
+        audio.spk.pause();
+        uLCD.cls();
+        wait(0.5);
+      }
+      if(k < 7)
+        k++;
+      else 
+        k = 0;
+    }
+    if(stop == 1){
+      break;
+    }
+  }  
+  uLCD.printf("\nScore: %d\n", score);
+}
+void FXOS8700CQ_readRegs(int addr, uint8_t * data, int len);
+void FXOS8700CQ_writeRegs(uint8_t * data, int len);
+int gesture() {
+   //pc.baud(115200);
+   uint8_t who_am_i, data[2], res[6];
+   int16_t acc16;
+   float t[3];
+   int ti = 0;
+   int k = 0;
+   int flag = 0;
+   int waittime = 0;
+   // Enable the FXOS8700Q
+   FXOS8700CQ_readRegs( FXOS8700Q_CTRL_REG1, &data[1], 1);
+   data[1] |= 0x01;
+   data[0] = FXOS8700Q_CTRL_REG1;
+   FXOS8700CQ_writeRegs(data, 2);
+   // Get the slave address
+   FXOS8700CQ_readRegs(FXOS8700Q_WHOAMI, &who_am_i, 1);
+ //  pc.printf("Here is %x\r\n", who_am_i);
+   while (true) {
+      FXOS8700CQ_readRegs(FXOS8700Q_OUT_X_MSB, res, 6);
+      acc16 = (res[0] << 6) | (res[1] >> 2);
+      if (acc16 > UINT14_MAX/2)
+         acc16 -= UINT14_MAX;
+      t[0] = ((float)acc16) / 4096.0f;
+      acc16 = (res[2] << 6) | (res[3] >> 2);
+      if (acc16 > UINT14_MAX/2)
+         acc16 -= UINT14_MAX;
+      t[1] = ((float)acc16) / 4096.0f;
+      acc16 = (res[4] << 6) | (res[5] >> 2);
+      if (acc16 > UINT14_MAX/2)
+         acc16 -= UINT14_MAX;
+      t[2] = ((float)acc16) / 4096.0f;
+      if(t[0] > 0.8 && t[2] < 0.4)
+        heavy = 1;
+      else if(t[0] < -0.8 && t[2] < 0.4)
+        light = 1;
+      else{
+        heavy = 0;
+        light = 0;
+      }
+      if(waittime > 30){
+        ti++;
+        if(ti < 5){
+          if((0 < k && k < 10) ||( 20 < k && k < 30) || (40 < k && k< 50)){
+            if(heavy == 1 && flag == 0){
+              score++;
+              flag = 1;
+            }
+          }
+          else if((10 < k && k < 20) || (30 < k && k < 40) || (50 < k && k <60) || (60 < k && k <70)){
+            if(light == 1 && flag == 0){
+              score++;
+              flag = 1;
+            }
+          }
+        }
+        else if(ti == 10){
+          ti = 0;
+          flag = 0;
+        }
+        if(k < 70)
+          k++;
+        else 
+          k = 0;
+    }
+    wait(0.1);
+    if(stop == 1){
+      break;
+    }
+    waittime++;
+  }
+}
 void confirm(void){ 
   stop = 0;                             
   switch(state){
@@ -220,10 +390,8 @@ void confirm(void){
         if(songnum < 2)
           songnum++;
         pc.printf("%d", songnum);
-        uLCD.printf("\nLoad song%d...\n", songnum);
         loadSignal();
-        uLCD.printf("\nplay song%d\n", songnum);
-        state = 3;
+        state = 4;
         play();
         break;
       case 1:
@@ -231,10 +399,8 @@ void confirm(void){
         if(songnum > 0)
           songnum--;
         pc.printf("%d", songnum);
-        uLCD.printf("\nLoad song%d...\n", songnum);
         loadSignal();
-        uLCD.printf("\nplay song%d\n", songnum);
-        state = 3;
+        state = 4;
         play();
         break;
       case 2:
@@ -277,12 +443,15 @@ void confirm(void){
           if(button2 == 0)
             break;
         }
-        uLCD.printf("\nLoad song%d...\n", songnum);
         pc.printf("%d", songnum);
         loadSignal();
-        uLCD.printf("\nplay song%d\n", songnum);
-        state = 3;
+        state = 4;
         play();
+        break;
+      case 3:
+        queue2.call(playTaiko);
+        queue3.call(gesture);
+        state = 4;
         break;
       default:
         break;
@@ -290,6 +459,8 @@ void confirm(void){
 } 
  
 void DNN(){
+  //queue2.cancel(idC1);
+  //queue3.cancel(idC2);
   audio.spk.pause();
   uLCD.cls();
   uLCD.printf("\nmode\n");
@@ -321,7 +492,7 @@ void DNN(){
     // Produce an output
     if (gesture_index < label_num) {
       //error_reporter->Report(config.output_message[gesture_index]);
-      if(state < 2)
+      if(state < 3)
         state++;
       else
         state = 0;
@@ -335,6 +506,9 @@ void DNN(){
         case 2:
           select();
           break;
+        case 3:
+          uLCD.cls();
+          uLCD.printf("\nTaiko game\n");
         default:
           break;
         }/*
@@ -425,5 +599,5 @@ int main(int argc, char* argv[]) {
   t1.start(callback(&queue1, &EventQueue::dispatch_forever));
   button1.rise(queue1.event(DNN));
   t2.start(callback(&queue2, &EventQueue::dispatch_forever));
-  
+  t3.start(callback(&queue3, &EventQueue::dispatch_forever));
 }
